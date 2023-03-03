@@ -1,15 +1,18 @@
 import os
 import tensorflow_io as tfio
 import tensorflow as tf
+from itertools import groupby
+
 import matplotlib.pyplot as plt
 import seaborn as sns
+import numpy as np
 
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Conv2D, Dense, Flatten, MaxPooling2D, Dropout
 from sklearn.metrics import confusion_matrix, classification_report
 
 
-def load_wav_16k_mono(filename, sample_rate_out = 16000):
+def load_wav_output_mono_channel_file(filename, sample_rate_out = 16000):
     """This function takes a filename, which is the full
      path of a specific .wav file, then decodes that file 
      to find the tensor associated with the sound - this is
@@ -39,7 +42,7 @@ def check_artifacts_dir(save_path = '../artifacts/'):
         os.mkdir(save_path)
     return 
 
-def plot_ex_wavs(wav, nwav, file_name = 'example_wavelengths', save_path = '../artifacts/'):
+def plot_ex_wavs(wav, nwav, filename = 'example_wavelengths', save_path = '../artifacts/'):
     """This is meant to be a program which saves a comparison 
     graph of a capuchin and not a capuchin wav file plotted with a legend as a .png"""
     check_artifacts_dir(save_path)
@@ -48,14 +51,14 @@ def plot_ex_wavs(wav, nwav, file_name = 'example_wavelengths', save_path = '../a
     plt.title("sample wav forms from capuchin and not a capuchin files")
     plt.plot(wav)
     plt.plot(nwav)
-    fig.savefig(file_name, save_path)
+    fig.savefig(save_path+filename+'.png' )
     plt.close()
     return
 
 def get_max_frames_from_mean_length(data_dir, sample_rate = 16000):
     lengths = []
     for file in os.listdir(data_dir):
-        tensor_wave = load_wav_16k_mono(data_dir+file, sample_rate)
+        tensor_wave = load_wav_output_mono_channel_file(data_dir+file, sample_rate)
         lengths.append(len(tensor_wave))
 
     avg = tf.math.reduce_mean(lengths).numpy()
@@ -63,7 +66,7 @@ def get_max_frames_from_mean_length(data_dir, sample_rate = 16000):
 
     return sample_rate*min_time
 
-def get_file_lengths_plot(data_dir, sample_rate = 16000, save_path = '../artifacts/'):
+def save_file_lengths_plot(data_dir, sample_rate = 16000, filename = 'training_wave_lengths', save_path = '../artifacts/'):
     '''This function reads in the data located in data_dir and plots the lengths of the files.
     This length is going to be the number of frames in the file, with the assumption the files 
     are sampled at 16k frames per second. This is then saved 
@@ -72,7 +75,7 @@ def get_file_lengths_plot(data_dir, sample_rate = 16000, save_path = '../artifac
     check_artifacts_dir(save_path)
     lengths = []
     for file in os.listdir(data_dir):
-        tensor_wave = load_wav_16k_mono(data_dir+file)
+        tensor_wave = load_wav_output_mono_channel_file(data_dir+file)
         lengths.append(len(tensor_wave))
 
     fig = plt.figure(figsize = (10, 10))
@@ -81,7 +84,7 @@ def get_file_lengths_plot(data_dir, sample_rate = 16000, save_path = '../artifac
     plt.plot([i for i in range(len(lengths))], np.ones(len(lengths))*tf.math.reduce_mean(lengths).numpy(), 'r-')
     plt.plot([i for i in range(len(lengths))], np.ones(len(lengths))*tf.math.reduce_max(lengths).numpy(), 'b')
     plt.plot([i for i in range(len(lengths))], np.ones(len(lengths))*tf.math.reduce_min(lengths).numpy(), 'g')
-    fig.savfig(save_path)
+    fig.savefig(save_path+filename+'.png')
     plt.close()
     return 
 
@@ -95,7 +98,7 @@ def preprocess(file_path:str, label:int, frames = 48000, sample_rate_out = 16000
        we assume our sample rate is 16000 frames/second, thus this 48000 allows for 3
         second recordings. 
     '''
-    wav = load_wav_16k_mono(file_path, sample_rate_out)
+    wav = load_wav_output_mono_channel_file(file_path, sample_rate_out)
     
     ##Select as much wav as fills frames, if len(wav) < frames, this will be less than frames and will need padding
     wav = wav[:frames]
@@ -142,7 +145,7 @@ def power_to_db(S, amin=1e-16, top_db=80.0):
     return log_spec
 
 def preprocess_to_mel_spectrogram(file_path, label, frames = 48000, ):
-    wav = load_wav_16k_mono(file_path)
+    wav = load_wav_output_mono_channel_file(file_path)
     
     ##Select as much wav as fills frames, if len(wav) < frames, this will be less than frames and will need padding
     wav = wav[:frames]
@@ -231,7 +234,7 @@ def plot_spectrogram_subplot(pos_dir: str, neg_dir: str, filename = 'positive_ne
     axs[3].title.set_text('Negative Class Mels Spectrogram')
     axs[3].imshow(tf.transpose(log_mag_mel_spec_neg)[0])
     plt.tight_layout
-    fig.savefig(save_path)
+    fig.savefig(save_path+filename+'.png')
     return
 
 def get_dataset(pos_dir: str, neg_dir: str):
@@ -325,7 +328,7 @@ def get_model_performance_subplots(model, filename = 'model_performance_subplots
     ax4.plot(model.history['precision_1'], 'r')
     ax4.plot(model.history['val_precision_1'], 'b')
 
-    fig.savefig(filename, save_path)
+    fig.savefig(save_path+filename+'.png')
     plt.close()
     return
 
@@ -366,4 +369,127 @@ def save_confusion_matrix(y_true, yhat, filename = 'confusion_matrix', save_path
     plt.show() 
     fig.savefig()
     plt.close()
+    return
+
+def load_mp3_output_mono_channel_file(filename, sample_rate_out = 16000):
+  """ Load an mp3 file, convert it to a float tensor, resample
+  to some specified output sample rate
+  """
+  res = tfio.audio.AudioIOTensor(filename)
+  # Convert to tensor and combine channels
+  tensor = res.to_tensor()
+  tensor = tf.math.reduce_sum(tensor, axis = 1) / 2
+  #extract sample rate and cast to tf.datatype
+  sample_rate = res.rate
+  sample_rate = tf.cast(sample_rate, dtype = tf.int64)
+  # Resample to sample_rate_out
+  wav = tfio.audio.resample(tensor, rate_in = sample_rate, rate_out = sample_rate_out)
+  return wav
+
+def preprocess_mp3(sample):
+    """This is for inference, not necessarily for training. As such, this does not produce a label like previouspreprocessing  functions"""
+    sample = sample[0]
+    zero_padding = tf.zeros([48000] - tf.shape(sample), dtype=tf.float32)
+    wav = tf.concat([zero_padding, sample],0)
+    spectrogram = tf.signal.stft(wav, frame_length=320, frame_step=32)
+    spectrogram = tf.abs(spectrogram)
+    spectrogram = tf.expand_dims(spectrogram, axis=2)
+    return spectrogram
+
+def preprocess_to_mel_spectrogram_mp3(sample, frames = 48000):
+    """This is for inference, not necessarily for training. As such, this does not produce a label like previouspreprocessing  functions"""
+
+    ##Calculate the number of zeros for padding, note if the wav >= frames, this will be empty
+    sample = sample[0]
+    zero_padding = tf.zeros([frames] - tf.shape(sample), dtype = tf.float32)
+
+    ##Add zeros at the start IF the wav length < frames
+    wav = tf.concat([zero_padding, sample], 0)
+
+    #use short time fourier transform
+    spectrogram = tf.signal.stft(wav,
+     frame_length = 320, ##This is fft_size
+     frame_step = 32 ## this is hop_size
+        ) #
+
+    #Get the magnitude of the signal (los direction)
+    spectrogram = tf.abs(spectrogram)
+    
+    mel_filter = tf.signal.linear_to_mel_weight_matrix(
+        num_mel_bins=100,
+        num_spectrogram_bins = 257,
+        sample_rate=frames,
+        lower_edge_hertz=frames/100,
+        upper_edge_hertz=frames/2,
+        dtype=tf.dtypes.float32)
+
+    mel_power_spectrogram = tf.matmul(tf.square(spectrogram), mel_filter)
+
+    log_magnitude_mel_spectrograms = power_to_db(mel_power_spectrogram)
+
+    log_magnitude_mel_spectrograms = tf.expand_dims(log_magnitude_mel_spectrograms, axis = 2)
+
+    return log_magnitude_mel_spectrograms
+
+def forest_recordings_inference(spec_type:str, 
+            inf_batch_size: int,
+            model,
+            filename = 'results',
+            data_path = '../data/Forest Recordings/',
+            frames = 48000,
+            save_path = '../artifacts/'):
+    """ This function takes files that are MUCH longer in a different directory and 
+    attempts to find whether or not there is a positive class in the files. As such
+    it has slightly different preprocessing functions it utilizes. While most of
+    this could be abstracted out of the function and put into the main .py. However, 
+    to do that we'd need to output the file variable. As such, I just put this into a big function...
+    """
+
+    results = {}
+    ## Process files from the forest_recordings for data, 
+    for file in os.listdir():
+        FILEPATH = os.path.join(data_path, file)
+        
+        wav = load_mp3_output_mono_channel_file(FILEPATH)
+
+        audio_slices = tf.keras.utils.timeseries_dataset_from_array(wav,
+                 wav,
+                sequence_length = frames,
+                sequence_stride = frames,
+                batch_size = inf_batch_size)
+
+        if spec_type == 'spectrogram':
+            audio_slices = audio_slices.map(preprocess_mp3)
+        elif spec_type == 'mels_spectrogram':
+            audio_slices = audio_slices.map(preprocess_to_mel_spectrogram_mp3)
+
+        audio_slices = audio_slices.batch(inf_batch_size)
+        
+        yhat = model.predict(audio_slices)
+        
+        results[file] = yhat
+
+    class_preds = {}
+
+    for file, logits in results.items():
+
+        class_preds[file] = [1 if prediction > 0.99 else 0 for prediction in logits]
+
+    postprocessed = {}
+    
+    for file, scores in class_preds.items():
+
+        postprocessed[file] = tf.math.reduce_sum([key for key, group in groupby(scores)]).numpy()
+
+    postprocessed
+
+    with open(save_path + filename+'.csv', 'w', newline='') as f:
+
+        writer = csv.writer(f, delimiter=',')
+
+        writer.writerow(['recording', 'capuchin_calls'])
+
+        for key, value in postprocessed.items():
+
+            writer.writerow([key, value])
     return
