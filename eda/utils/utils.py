@@ -1,3 +1,7 @@
+##Date Modified: 3/3/23
+##Author: Wolfgang Black
+##This utils was developed from the work shown in Z_by_HP_audio_classification_challenge/eda/code_and_data_exloratory_analysis.ipynb 
+
 import os
 import tensorflow_io as tfio
 import tensorflow as tf
@@ -34,7 +38,8 @@ def load_wav_output_mono_channel_file(filename, sample_rate_out = 16000):
     return wav
 
 def check_artifacts_dir(save_path = '../artifacts/'):
-    '''This function checks if there is an artifacts dir in our roots 
+    '''This function checks if there is an artifacts dir in our root dir, 
+    if not it'll create the aritifacts dir to prevent an error
     '''
     try:
          os.listdir(save_path)
@@ -54,17 +59,6 @@ def plot_ex_wavs(wav, nwav, filename = 'example_wavelengths', save_path = '../ar
     fig.savefig(save_path+filename+'.png' )
     plt.close()
     return
-
-def get_max_frames_from_mean_length(data_dir, sample_rate = 16000):
-    lengths = []
-    for file in os.listdir(data_dir):
-        tensor_wave = load_wav_output_mono_channel_file(data_dir+file, sample_rate)
-        lengths.append(len(tensor_wave))
-
-    avg = tf.math.reduce_mean(lengths).numpy()
-    min_time = round(avg/sample_rate)
-
-    return sample_rate*min_time
 
 def save_file_lengths_plot(data_dir, sample_rate = 16000, filename = 'training_wave_lengths', save_path = '../artifacts/'):
     '''This function reads in the data located in data_dir and plots the lengths of the files.
@@ -91,7 +85,7 @@ def save_file_lengths_plot(data_dir, sample_rate = 16000, filename = 'training_w
 
 def preprocess(file_path:str, label:int, frames = 48000, sample_rate_out = 16000):
     '''This function reads in a .wav file path and its corresponding label (as an int)
-     and then utilizes the load_wav_16k_mono function to read in the .wav and generate
+     and then utilizes the load_wav_output_mono_channel_file function to read in the .wav and generate
       a spectrogram that can be used as an input into a CNN. 
 
       Note: frames is used here to indicate a max length of a recording. For instance,
@@ -144,7 +138,17 @@ def power_to_db(S, amin=1e-16, top_db=80.0):
 
     return log_spec
 
-def preprocess_to_mel_spectrogram(file_path, label, frames = 48000, ):
+def preprocess_to_mel_spectrogram(file_path, label, frames = 48000):
+    '''This function reads in a .wav file path and its corresponding label (as an int)
+     and then utilizes the load_wav_output_mono_channel_file function to read in the .wav and generate
+      a mels spectrogram that can be used as an input into a CNN.
+
+      More can be read about the Mels Spectrogram here: https://medium.com/analytics-vidhya/understanding-the-mel-spectrogram-fca2afa2ce53
+
+      Note: frames is used here to indicate a max length of a recording. For instance,
+       we assume our sample rate is 16000 frames/second, thus this 48000 allows for 3
+        second recordings. 
+    '''
     wav = load_wav_output_mono_channel_file(file_path)
     
     ##Select as much wav as fills frames, if len(wav) < frames, this will be less than frames and will need padding
@@ -238,7 +242,10 @@ def plot_spectrogram_subplot(pos_dir: str, neg_dir: str, filename = 'positive_ne
     return
 
 def get_dataset(pos_dir: str, neg_dir: str):
-
+    '''This function reads in the directories of the positive and negative classes and forms datsets along with a tensor to specify the labels. 
+    This function is important as it allows the use of .map and the implementation of the preprocess functions to take a list of .wav files and
+    transform that into usable tenors or images for the cnn.
+    '''
      ##Use pos and neg dirs to get data
     pos_dir = os.path.join('../data','Parsed_Capuchinbird_Clips/')
     neg_dir = '../data/Parsed_Not_Capuchinbird_Clips/'
@@ -273,7 +280,7 @@ def map_dataset_to_spectrograms(pos_dir:str, neg_dir:str, spec_type:str, buffer:
     
     return data
 
-def get_test_train_split(pos_dir:str, neg_dir:str, spec_type:str, buffer:int, batch_size:int, split_size:float):
+def get_train_test_split(pos_dir:str, neg_dir:str, spec_type:str, buffer:int, batch_size:int, split_size:float):
     """This function uses map_dataset_to_spectrograms to transform a directory of wav files into spectrograms,
     type denoted by spec_type, and then splits the data into a train and test dataset using the split_size. split_size
     is a float, meant to be between 0-1, and determines the size of the train set, with the remainder used for test"""
@@ -289,6 +296,10 @@ def build_and_compile_CNN_model(train,
             optimizer = 'Adam',
             loss_func = 'BinaryCrossentropy',
             metric_arg_list =[tf.keras.metrics.Accuracy(), tf.keras.metrics.Recall(), tf.keras.metrics.Precision()]):
+    '''Function is meant to simplify the development of a sequential CNN. Here we assume a CNN of similar architecture to 
+    ResNet50 is sufficent for the current modeling needs. This should either be overhauled or replaced with other model functions
+    if the model architecture ends up needing refinement
+    '''
 
     samples, _ = train.as_numpy_iterator().next()
     input_shape = samples.shape[1:]
@@ -307,26 +318,29 @@ def build_and_compile_CNN_model(train,
                 metrics = metric_arg_list)
     return model
 
-def get_model_performance_subplots(model, filename = 'model_performance_subplots', save_path =  '../artifacts/'):
+def get_model_performance_subplots(model_history, filename = 'model_performance_subplots', save_path =  '../artifacts/'):
+    """This function generates a 2x2 subplot showing the evolution of the models accuracy, loss, recall, and precision during training for both
+    the training data and the validation data. This figure is then saved to the artifacts dir
+    """
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize = (10, 10))
 
     ax1.title.set_text("Accuracy")
-    ax1.plot(model.history['accuracy'], 'r')
-    ax1.plot(model.history['val_accuracy'], 'b')
+    ax1.plot(model_history.history['accuracy'], 'r')
+    ax1.plot(model_history.history['val_accuracy'], 'b')
     ax1.legend(['train', 'val'])
 
     ax2.title.set_text("Loss")
-    ax2.plot(model.history['loss'], 'r')
-    ax2.plot(model.history['val_loss'], 'b')
+    ax2.plot(model_history.history['loss'], 'r')
+    ax2.plot(model_history.history['val_loss'], 'b')
     ax2.set_ylim([0, 1])
 
     ax3.title.set_text("Recall")
-    ax3.plot(model.history['recall_1'], 'r')
-    ax3.plot(model.history['val_recall_1'], 'b')
+    ax3.plot(model_history.history['recall'], 'r')
+    ax3.plot(model_history.history['val_recall'], 'b')
 
     ax4.title.set_text("Precision")
-    ax4.plot(model.history['precision_1'], 'r')
-    ax4.plot(model.history['val_precision_1'], 'b')
+    ax4.plot(model_history.history['precision'], 'r')
+    ax4.plot(model_history.history['val_precision'], 'b')
 
     fig.savefig(save_path+filename+'.png')
     plt.close()
@@ -337,6 +351,10 @@ def get_model_pred_and_reports(test_data,
         logit_threshold = 0.5, 
         confusion_matrix_filename = 'confusion_matrix',
         classification_report_filename = 'classification_report', save_path = '../artifacts/'):
+    '''A function used for model inference post-training for the purpose of generating a classification
+     report and confusion matrix before saving the model. This calls save_classification_report and save_confusion_matrix
+     to generate those artifacts.
+     '''
     
     X_test, y_test = test_data.as_numpy_iterator().next()
 
@@ -351,23 +369,24 @@ def get_model_pred_and_reports(test_data,
 
 
 def save_classification_report(y_true, yhat, filename = 'classification_report', save_path = '../artifacts/'):
+    """Saves the sklearn.metrics.classification report as a .txt for future reference"""
     textfile = open(save_path+filename+'.txt', 'w')
     textfile.write(classification_report(y_true, yhat) )
     textfile.close()
     return
 
 def save_confusion_matrix(y_true, yhat, filename = 'confusion_matrix', save_path =  '../artifacts/'):
-    
+    '''Saves a seaborn confusion matrix post training as a .png for future reference'''
     confusion_mtx = tf.math.confusion_matrix(y_true, yhat)
-    plt.figure(figsize=(10, 8))
-    fig = sns.heatmap(confusion_mtx,
+    fig = plt.figure(figsize=(10, 8))
+    sns.heatmap(confusion_mtx,
                 xticklabels=[0,1],
                 yticklabels=[0,1],
                 annot=True, fmt='g')
     plt.xlabel('Prediction')
     plt.ylabel('Label')
-    plt.show() 
-    fig.savefig()
+    # plt.show() 
+    fig.savefig(save_path+filename+'.png')
     plt.close()
     return
 

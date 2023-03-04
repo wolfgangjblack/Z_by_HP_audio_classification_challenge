@@ -4,6 +4,7 @@
 ##This script is meant to perform an EDA on the data sources for an audio classification problem
 ##The goal of this work is to try to determine how many Capuchin Birds are in a specific area of a forest
 ##To answer this a classifier will be built to recognize a capuchin call from an audio recording. 
+#-----------------------------
 
 ##Import Libraries and functions
 import os
@@ -29,6 +30,7 @@ not_capuchin_file = neg_dir + 'afternoon-birds-song-in-forest-0.wav'
 
 wav = load_wav_output_mono_channel_file(capuchin_file)
 nwav =load_wav_output_mono_channel_file(not_capuchin_file)
+#-----------------------------
 
 ##Plot and save figures. Figures include wave forms for different calls
 ##Audio lengths, and two different types of spectrograms. More about
