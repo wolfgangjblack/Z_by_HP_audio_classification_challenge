@@ -1,0 +1,18 @@
+{
+    "artifacts_path": "../artifacts/",
+    "spec_type": "mels_spectrogram",
+    "buffer": 1000,
+    "batch": 64,
+    "split": 0.7, 
+    "epochs": 15,
+    "inf_batch_size": 64,
+    "results_filename": "results",
+    "unlabeled_data_path": "../data/Forest Recordings/",
+    "frames": 48000,
+    "need_to_eda": 0, 
+    "need_to_train": 0,
+    "pos_dir": "../data/Parsed_Capuchinbird_Clips/",
+    "neg_dir": "../data/Parsed_Not_Capuchinbird_Clips/",
+    "training_logit_threshold": 0.5,
+    "inference_logit_threshold": 0.99
+}
